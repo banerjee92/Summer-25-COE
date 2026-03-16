@@ -1,0 +1,309 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);color:var(--color-text-primary)}
+.wrap{padding:1rem 0}
+.tabs{display:flex;gap:4px;margin-bottom:1.25rem;border-bottom:0.5px solid var(--color-border-tertiary);padding-bottom:0}
+.tab{padding:6px 14px;font-size:13px;cursor:pointer;border:none;background:none;color:var(--color-text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.active{color:var(--color-text-primary);border-bottom:2px solid var(--color-text-primary);font-weight:500}
+.panel{display:none}.panel.active{display:block}
+.metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.5rem}
+.metric{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px 14px}
+.metric .label{font-size:12px;color:var(--color-text-secondary);margin-bottom:4px}
+.metric .val{font-size:22px;font-weight:500}
+.chart-wrap{position:relative;width:100%}
+.controls{display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+.controls select,.controls input{font-size:13px;padding:5px 10px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-primary);height:32px}
+.controls label{font-size:13px;color:var(--color-text-secondary)}
+.tooltip-box{position:absolute;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 12px;font-size:12px;pointer-events:none;display:none;z-index:10;max-width:220px;line-height:1.6}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:6px 8px;border-bottom:0.5px solid var(--color-border-tertiary);font-weight:500;color:var(--color-text-secondary);cursor:pointer;white-space:nowrap}
+th:hover{color:var(--color-text-primary)}
+td{padding:6px 8px;border-bottom:0.5px solid var(--color-border-tertiary)}
+tr:hover td{background:var(--color-background-secondary)}
+.bar-cell{display:flex;align-items:center;gap:6px}
+.bar{height:8px;border-radius:4px;background:#3266ad;flex-shrink:0}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:500}
+.pill.high{background:#EAF3DE;color:#3B6D11}
+.pill.mid{background:#FAEEDA;color:#854F0B}
+.pill.low{background:#FCEBEB;color:#A32D2D}
+.scatter-svg{width:100%;overflow:visible}
+</style>
+<div class="wrap">
+<div class="metric-row" id="summary-metrics"></div>
+<div class="tabs">
+  <button class="tab active" data-panel="scatter">Productivity vs Impact</button>
+  <button class="tab" data-panel="rankings">Rankings</button>
+  <button class="tab" data-panel="trends">Yearly trends</button>
+  <button class="tab" data-panel="selfcite">Self-citation</button>
+  <button class="tab" data-panel="table">Full table</button>
+</div>
+
+<div class="panel active" id="panel-scatter">
+  <div class="controls">
+    <label>X axis:</label>
+    <select id="sc-x">
+      <option value="pubs">Total publications</option>
+      <option value="h">H-index</option>
+      <option value="productivity">Productivity score</option>
+      <option value="journals">Unique journals</option>
+    </select>
+    <label>Y axis:</label>
+    <select id="sc-y">
+      <option value="avg_cites">Avg citations/paper</option>
+      <option value="cites">Total citations</option>
+      <option value="impact">Citation impact score</option>
+      <option value="highly_cited">Highly cited papers</option>
+    </select>
+    <label>Size:</label>
+    <select id="sc-size">
+      <option value="h">H-index</option>
+      <option value="pubs">Publications</option>
+      <option value="cites">Citations</option>
+    </select>
+  </div>
+  <div style="position:relative">
+    <div class="chart-wrap" style="height:420px"><canvas id="scatterChart"></canvas></div>
+    <div class="tooltip-box" id="sc-tip"></div>
+  </div>
+</div>
+
+<div class="panel" id="panel-rankings">
+  <div class="controls">
+    <label>Rank by:</label>
+    <select id="rank-by">
+      <option value="cites">Total citations</option>
+      <option value="h">H-index</option>
+      <option value="avg_cites">Avg citations/paper</option>
+      <option value="highly_cited">Highly cited papers</option>
+      <option value="impact">Citation impact score</option>
+      <option value="pubs">Total publications</option>
+    </select>
+    <label>Show top:</label>
+    <select id="rank-n">
+      <option value="15">15</option>
+      <option value="20">20</option>
+      <option value="30">30</option>
+    </select>
+  </div>
+  <div class="chart-wrap" id="rank-chart-wrap" style="height:520px"><canvas id="rankChart"></canvas></div>
+</div>
+
+<div class="panel" id="panel-trends">
+  <div class="controls">
+    <label>View:</label>
+    <select id="trend-mode">
+      <option value="total">Dept total per year</option>
+      <option value="top10">Top 10 authors stacked</option>
+    </select>
+  </div>
+  <div class="chart-wrap" style="height:360px"><canvas id="trendChart"></canvas></div>
+</div>
+
+<div class="panel" id="panel-selfcite">
+  <div class="controls">
+    <label>Metric:</label>
+    <select id="sc2-metric">
+      <option value="self_ref">Self-reference rate (biblio %)</option>
+      <option value="self_cite_recv">Self-citation received %</option>
+    </select>
+  </div>
+  <div class="chart-wrap" style="height:400px"><canvas id="selfChart"></canvas></div>
+  <div style="margin-top:1rem;font-size:12px;color:var(--color-text-secondary)">
+    Self-reference rate = % of references in the author's own papers that cite their prior work. Self-citation received = % of incoming citations that come from the author themselves.
+  </div>
+</div>
+
+<div class="panel" id="panel-table">
+  <div class="controls">
+    <input type="text" id="tbl-search" placeholder="Filter by name..." style="width:200px">
+    <label>Min H-index:</label>
+    <input type="number" id="tbl-minh" value="0" min="0" style="width:60px">
+  </div>
+  <div style="overflow-x:auto">
+    <table id="main-table">
+      <thead>
+        <tr>
+          <th data-col="name">Author ↕</th>
+          <th data-col="h">H-index ↕</th>
+          <th data-col="pubs">Pubs ↕</th>
+          <th data-col="cites">Citations ↕</th>
+          <th data-col="avg_cites">Avg cit/paper ↕</th>
+          <th data-col="highly_cited">Highly cited ↕</th>
+          <th data-col="self_ref">Self-ref % ↕</th>
+          <th data-col="journals">Journals ↕</th>
+        </tr>
+      </thead>
+      <tbody id="tbl-body"></tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const RAW = [{"name":"Thomas Boland","h":36,"pubs":24,"cites":1652,"avg_cites":68.83,"self_ref":15.46,"self_cite_recv":18.83,"impact":121.56,"journals":19,"highly_cited":12,"productivity":4.14,"y2020":1,"y2021":1,"y2022":4,"y2023":2,"y2024":0,"y2025":1},{"name":"Sergio D. Cabrera","h":12,"pubs":10,"cites":38,"avg_cites":3.8,"self_ref":4.31,"self_cite_recv":18.42,"impact":5.65,"journals":9,"highly_cited":1,"productivity":5.19,"y2020":0,"y2021":1,"y2022":1,"y2023":0,"y2024":0,"y2025":3},{"name":"James P. Carney","h":2,"pubs":2,"cites":1116,"avg_cites":558,"self_ref":0.19,"self_cite_recv":0.09,"impact":556.5,"journals":2,"highly_cited":2,"productivity":0.1,"y2020":1,"y2021":0,"y2022":0,"y2023":0,"y2024":0,"y2025":0},{"name":"Cesar J. Carrasco","h":11,"pubs":12,"cites":95,"avg_cites":7.92,"self_ref":7.17,"self_cite_recv":16.84,"impact":6.47,"journals":12,"highly_cited":4,"productivity":2.43,"y2020":3,"y2021":2,"y2022":1,"y2023":0,"y2024":0,"y2025":0},{"name":"Alejandra G. Castellanos","h":9,"pubs":32,"cites":230,"avg_cites":7.19,"self_ref":3.32,"self_cite_recv":17.09,"impact":6.97,"journals":21,"highly_cited":9,"productivity":1.57,"y2020":2,"y2021":3,"y2022":4,"y2023":1,"y2024":2,"y2025":4},{"name":"Martine C. Ceberio","h":9,"pubs":102,"cites":88,"avg_cites":0.86,"self_ref":10.1,"self_cite_recv":43.68,"impact":1.95,"journals":31,"highly_cited":1,"productivity":8.67,"y2020":14,"y2021":5,"y2022":10,"y2023":27,"y2024":6,"y2025":0},{"name":"Yoonsik Cheon","h":13,"pubs":12,"cites":34,"avg_cites":2.83,"self_ref":12.72,"self_cite_recv":29.41,"impact":30.36,"journals":12,"highly_cited":1,"productivity":1.86,"y2020":1,"y2021":2,"y2022":1,"y2023":1,"y2024":2,"y2025":0},{"name":"Jack F. Chessa","h":12,"pubs":8,"cites":29,"avg_cites":3.62,"self_ref":2.83,"self_cite_recv":6.9,"impact":63.88,"journals":7,"highly_cited":1,"productivity":1.24,"y2020":2,"y2021":1,"y2022":1,"y2023":0,"y2024":0,"y2025":0},{"name":"Ruey Long Cheu","h":34,"pubs":45,"cites":535,"avg_cites":11.89,"self_ref":6.59,"self_cite_recv":10.65,"impact":26.75,"journals":27,"highly_cited":9,"productivity":7.38,"y2020":5,"y2021":4,"y2022":7,"y2023":4,"y2024":0,"y2025":2},{"name":"Pedro Cortés","h":21,"pubs":61,"cites":1015,"avg_cites":16.64,"self_ref":8.85,"self_cite_recv":13.1,"impact":15.44,"journals":43,"highly_cited":29,"productivity":3.71,"y2020":6,"y2021":8,"y2022":12,"y2023":8,"y2024":7,"y2025":5},{"name":"David Espalin","h":32,"pubs":46,"cites":1534,"avg_cites":33.35,"self_ref":17.97,"self_cite_recv":9.91,"impact":54.53,"journals":28,"highly_cited":32,"productivity":3.62,"y2020":7,"y2021":5,"y2022":3,"y2023":2,"y2024":1,"y2025":0},{"name":"Louis J. Everett","h":12,"pubs":7,"cites":11,"avg_cites":1.57,"self_ref":1.3,"self_cite_recv":0,"impact":8.86,"journals":4,"highly_cited":0,"productivity":3.48,"y2020":1,"y2021":0,"y2022":1,"y2023":0,"y2024":1,"y2025":0},{"name":"Carlos M. Ferregut","h":7,"pubs":6,"cites":30,"avg_cites":5,"self_ref":12.09,"self_cite_recv":56.67,"impact":4.73,"journals":5,"highly_cited":1,"productivity":2.29,"y2020":1,"y2021":0,"y2022":1,"y2023":0,"y2024":0,"y2025":0},{"name":"Angel Flores Abad","h":10,"pubs":35,"cites":215,"avg_cites":6.14,"self_ref":4.61,"self_cite_recv":7.91,"impact":37.57,"journals":28,"highly_cited":5,"productivity":2.43,"y2020":5,"y2021":3,"y2022":1,"y2023":3,"y2024":6,"y2025":2},{"name":"Benjamín Carrasco Flores","h":12,"pubs":25,"cites":130,"avg_cites":5.2,"self_ref":7.85,"self_cite_recv":20,"impact":6.52,"journals":11,"highly_cited":3,"productivity":5.24,"y2020":3,"y2021":1,"y2022":2,"y2023":3,"y2024":3,"y2025":3},{"name":"Eric Andrew Freudenthal","h":9,"pubs":3,"cites":8,"avg_cites":2.67,"self_ref":0,"self_cite_recv":12.5,"impact":13.79,"journals":3,"highly_cited":0,"productivity":2.48,"y2020":0,"y2021":0,"y2022":0,"y2023":1,"y2024":0,"y2025":0},{"name":"Olac Fuentes","h":18,"pubs":27,"cites":199,"avg_cites":7.37,"self_ref":7.09,"self_cite_recv":22.61,"impact":12.9,"journals":26,"highly_cited":6,"productivity":5,"y2020":4,"y2021":2,"y2022":3,"y2023":2,"y2024":1,"y2025":2},{"name":"Ann Quiroz Gates","h":15,"pubs":27,"cites":131,"avg_cites":4.85,"self_ref":7.6,"self_cite_recv":41.22,"impact":9.05,"journals":16,"highly_cited":5,"productivity":4.81,"y2020":1,"y2021":2,"y2022":0,"y2023":5,"y2024":2,"y2025":1},{"name":"Peter Golding","h":8,"pubs":29,"cites":41,"avg_cites":1.41,"self_ref":2.65,"self_cite_recv":19.51,"impact":5.38,"journals":4,"highly_cited":0,"productivity":3,"y2020":2,"y2021":5,"y2022":2,"y2023":2,"y2024":1,"y2025":1},{"name":"Roger V. Gonzalez","h":10,"pubs":17,"cites":64,"avg_cites":3.76,"self_ref":2.88,"self_cite_recv":15.62,"impact":10.96,"journals":12,"highly_cited":1,"productivity":2.62,"y2020":0,"y2021":2,"y2022":1,"y2023":2,"y2024":1,"y2025":4},{"name":"Mahmud Shahriar Hossain","h":12,"pubs":19,"cites":133,"avg_cites":7,"self_ref":6.47,"self_cite_recv":15.79,"impact":14.1,"journals":15,"highly_cited":3,"productivity":2,"y2020":0,"y2021":0,"y2022":1,"y2023":2,"y2024":3,"y2025":2},{"name":"Ahmad M. Itani","h":24,"pubs":33,"cites":668,"avg_cites":20.24,"self_ref":11.65,"self_cite_recv":15.87,"impact":20.99,"journals":20,"highly_cited":18,"productivity":4.48,"y2020":4,"y2021":5,"y2022":1,"y2023":2,"y2024":0,"y2025":1},{"name":"Meagan R. Kendall","h":8,"pubs":41,"cites":261,"avg_cites":6.37,"self_ref":8.57,"self_cite_recv":31.03,"impact":6.37,"journals":11,"highly_cited":6,"productivity":1.95,"y2020":0,"y2021":7,"y2022":9,"y2023":4,"y2024":3,"y2025":3},{"name":"Christopher D. Kiekintveld","h":29,"pubs":26,"cites":403,"avg_cites":15.5,"self_ref":13.02,"self_cite_recv":11.91,"impact":28.09,"journals":16,"highly_cited":10,"productivity":4.48,"y2020":0,"y2021":0,"y2022":0,"y2023":1,"y2024":3,"y2025":1},{"name":"Vladik Ya Kreinovich","h":37,"pubs":871,"cites":1290,"avg_cites":1.48,"self_ref":10.77,"self_cite_recv":38.48,"impact":5.1,"journals":113,"highly_cited":24,"productivity":69.1,"y2020":75,"y2021":82,"y2022":111,"y2023":221,"y2024":50,"y2025":25},{"name":"Wen Whai Li","h":20,"pubs":12,"cites":229,"avg_cites":19.08,"self_ref":9.14,"self_cite_recv":11.35,"impact":19.79,"journals":9,"highly_cited":5,"productivity":2.76,"y2020":2,"y2021":1,"y2022":2,"y2023":2,"y2024":0,"y2025":1},{"name":"Yirong Lin","h":38,"pubs":101,"cites":3658,"avg_cites":36.22,"self_ref":9.01,"self_cite_recv":8.67,"impact":40.22,"journals":58,"highly_cited":58,"productivity":7.38,"y2020":4,"y2021":8,"y2022":7,"y2023":6,"y2024":4,"y2025":14},{"name":"Luc Longpré","h":13,"pubs":15,"cites":13,"avg_cites":0.87,"self_ref":6.58,"self_cite_recv":15.38,"impact":6.1,"journals":11,"highly_cited":0,"productivity":4.1,"y2020":1,"y2021":0,"y2022":0,"y2023":4,"y2024":0,"y2025":0},{"name":"Amit Joe Lopes","h":14,"pubs":19,"cites":481,"avg_cites":25.32,"self_ref":3.55,"self_cite_recv":1.66,"impact":35.29,"journals":11,"highly_cited":3,"productivity":1.67,"y2020":3,"y2021":0,"y2022":7,"y2023":4,"y2024":1,"y2025":2},{"name":"Eric W. Macdonald","h":40,"pubs":129,"cites":4232,"avg_cites":32.81,"self_ref":13.38,"self_cite_recv":9.88,"impact":37.45,"journals":72,"highly_cited":69,"productivity":9.29,"y2020":16,"y2021":19,"y2022":18,"y2023":10,"y2024":15,"y2025":9},{"name":"Rajib Basu Rajib Mallick","h":30,"pubs":60,"cites":1389,"avg_cites":23.15,"self_ref":5.82,"self_cite_recv":7.31,"impact":34.84,"journals":31,"highly_cited":23,"productivity":6,"y2020":8,"y2021":6,"y2022":2,"y2023":5,"y2024":2,"y2025":4},{"name":"Paras Mandal","h":34,"pubs":114,"cites":2145,"avg_cites":18.82,"self_ref":8.9,"self_cite_recv":9.88,"impact":30.54,"journals":53,"highly_cited":39,"productivity":7.71,"y2020":14,"y2021":10,"y2022":9,"y2023":22,"y2024":19,"y2025":4},{"name":"Alex S. Mayer","h":28,"pubs":45,"cites":677,"avg_cites":15.04,"self_ref":9.19,"self_cite_recv":25.41,"impact":27.12,"journals":38,"highly_cited":23,"productivity":5.43,"y2020":7,"y2021":4,"y2022":6,"y2023":6,"y2024":3,"y2025":2},{"name":"Michael P. McGarry","h":14,"pubs":23,"cites":404,"avg_cites":17.57,"self_ref":2.99,"self_cite_recv":5.2,"impact":25.44,"journals":14,"highly_cited":3,"productivity":2.71,"y2020":3,"y2021":0,"y2022":0,"y2023":3,"y2024":3,"y2025":0},{"name":"Francisco Medina","h":41,"pubs":38,"cites":890,"avg_cites":23.42,"self_ref":8.3,"self_cite_recv":10.34,"impact":101.46,"journals":18,"highly_cited":17,"productivity":5.05,"y2020":3,"y2021":5,"y2022":3,"y2023":1,"y2024":6,"y2025":6},{"name":"Kenith E. Meissner","h":22,"pubs":15,"cites":406,"avg_cites":27.07,"self_ref":12.61,"self_cite_recv":17.24,"impact":18,"journals":11,"highly_cited":9,"productivity":3.24,"y2020":0,"y2021":0,"y2022":1,"y2023":0,"y2024":0,"y2025":0},{"name":"Shirley V. Moore","h":18,"pubs":28,"cites":327,"avg_cites":11.68,"self_ref":12.95,"self_cite_recv":23.55,"impact":18.35,"journals":24,"highly_cited":8,"productivity":4.62,"y2020":1,"y2021":0,"y2022":5,"y2023":0,"y2024":1,"y2025":7},{"name":"Patricia A. Nava","h":13,"pubs":6,"cites":25,"avg_cites":4.17,"self_ref":6.38,"self_cite_recv":40,"impact":10.85,"journals":5,"highly_cited":1,"productivity":1.95,"y2020":0,"y2021":0,"y2022":1,"y2023":0,"y2024":0,"y2025":0},{"name":"Arun Pennathur","h":13,"pubs":19,"cites":31,"avg_cites":1.63,"self_ref":0.8,"self_cite_recv":3.23,"impact":6.84,"journals":9,"highly_cited":1,"productivity":3.52,"y2020":0,"y2021":1,"y2022":1,"y2023":4,"y2024":5,"y2025":4},{"name":"Priyadarshini R. Pennathur","h":14,"pubs":38,"cites":220,"avg_cites":5.79,"self_ref":3.8,"self_cite_recv":8.68,"impact":8.2,"journals":24,"highly_cited":6,"productivity":2.86,"y2020":2,"y2021":1,"y2022":4,"y2023":5,"y2024":7,"y2025":5},{"name":"Stella A. Quiñones","h":12,"pubs":8,"cites":320,"avg_cites":40,"self_ref":4.48,"self_cite_recv":1.25,"impact":64.58,"journals":8,"highly_cited":2,"productivity":1.57,"y2020":1,"y2021":2,"y2022":0,"y2023":0,"y2024":0,"y2025":1},{"name":"Adeeba Abdul Raheem","h":9,"pubs":15,"cites":476,"avg_cites":31.73,"self_ref":1.31,"self_cite_recv":2.73,"impact":26.1,"journals":12,"highly_cited":6,"productivity":1,"y2020":1,"y2021":3,"y2022":3,"y2023":1,"y2024":1,"y2025":0},{"name":"Md Mahamudur Rahman","h":1,"pubs":1,"cites":11,"avg_cites":11,"self_ref":2.7,"self_cite_recv":18.18,"impact":11,"journals":1,"highly_cited":1,"productivity":0.05,"y2020":0,"y2021":0,"y2022":0,"y2023":0,"y2024":0,"y2025":0},{"name":"David A. Roberson","h":24,"pubs":41,"cites":1994,"avg_cites":48.63,"self_ref":20.59,"self_cite_recv":8.93,"impact":52.72,"journals":25,"highly_cited":26,"productivity":2.76,"y2020":2,"y2021":5,"y2022":1,"y2023":3,"y2024":5,"y2025":4},{"name":"Robert C. Roberts","h":16,"pubs":39,"cites":911,"avg_cites":23.36,"self_ref":11.42,"self_cite_recv":11.96,"impact":19.86,"journals":30,"highly_cited":13,"productivity":3,"y2020":1,"y2021":3,"y2022":7,"y2023":7,"y2024":2,"y2025":2},{"name":"Salamah Salamah","h":7,"pubs":11,"cites":22,"avg_cites":2,"self_ref":7.34,"self_cite_recv":27.27,"impact":3.37,"journals":6,"highly_cited":0,"productivity":1.67,"y2020":0,"y2021":0,"y2022":0,"y2023":0,"y2024":0,"y2025":1},{"name":"Ivonne Santiago","h":4,"pubs":17,"cites":66,"avg_cites":3.88,"self_ref":5.12,"self_cite_recv":19.7,"impact":4.14,"journals":6,"highly_cited":3,"productivity":1.05,"y2020":1,"y2021":4,"y2022":2,"y2023":3,"y2024":2,"y2025":4},{"name":"Brian E. Schuster","h":24,"pubs":47,"cites":626,"avg_cites":13.32,"self_ref":15.15,"self_cite_recv":20.61,"impact":32.05,"journals":23,"highly_cited":16,"productivity":3.62,"y2020":4,"y2021":5,"y2022":2,"y2023":0,"y2024":1,"y2025":4},{"name":"Evgeny Ya Shafirovich","h":27,"pubs":45,"cites":482,"avg_cites":10.71,"self_ref":14.08,"self_cite_recv":20.12,"impact":18.53,"journals":27,"highly_cited":18,"productivity":6.24,"y2020":6,"y2021":3,"y2022":6,"y2023":7,"y2024":2,"y2025":4},{"name":"Eric David Smith","h":8,"pubs":52,"cites":107,"avg_cites":2.06,"self_ref":2.57,"self_cite_recv":19.63,"impact":3.75,"journals":17,"highly_cited":2,"productivity":3.86,"y2020":19,"y2021":3,"y2022":2,"y2023":6,"y2024":1,"y2025":1},{"name":"Vivek Tandon","h":13,"pubs":22,"cites":245,"avg_cites":11.14,"self_ref":3.9,"self_cite_recv":15.51,"impact":12.71,"journals":17,"highly_cited":9,"productivity":2,"y2020":0,"y2021":4,"y2022":3,"y2023":1,"y2024":0,"y2025":1},{"name":"Deepak K. Tosh","h":19,"pubs":94,"cites":2005,"avg_cites":21.33,"self_ref":7.53,"self_cite_recv":11.62,"impact":21.2,"journals":66,"highly_cited":35,"productivity":4.52,"y2020":12,"y2021":14,"y2022":8,"y2023":6,"y2024":12,"y2025":9},{"name":"Tzu Liang Bill Tseng","h":35,"pubs":134,"cites":3040,"avg_cites":22.69,"self_ref":7.9,"self_cite_recv":7.89,"impact":17.63,"journals":64,"highly_cited":48,"productivity":12.33,"y2020":10,"y2021":19,"y2022":3,"y2023":0,"y2024":0,"y2025":0},{"name":"Shailendra Kumar Varma","h":18,"pubs":9,"cites":132,"avg_cites":14.67,"self_ref":13.3,"self_cite_recv":10.69,"impact":13.45,"journals":7,"highly_cited":4,"productivity":4.62,"y2020":2,"y2021":0,"y2022":0,"y2023":2,"y2024":0,"y2025":1},{"name":"Miguel Velez-Reyes","h":22,"pubs":57,"cites":261,"avg_cites":4.58,"self_ref":17.75,"self_cite_recv":25.67,"impact":9.55,"journals":17,"highly_cited":5,"productivity":9.38,"y2020":6,"y2021":4,"y2022":2,"y2023":8,"y2024":9,"y2025":6},{"name":"Natalia Villanueva-Rosales","h":10,"pubs":27,"cites":142,"avg_cites":5.26,"self_ref":11.98,"self_cite_recv":33.8,"impact":13.88,"journals":18,"highly_cited":4,"productivity":2.05,"y2020":3,"y2021":1,"y2022":5,"y2023":1,"y2024":1,"y2025":3},{"name":"Ricardo F. von Borries","h":7,"pubs":8,"cites":26,"avg_cites":3.25,"self_ref":4.89,"self_cite_recv":30.77,"impact":12.79,"journals":6,"highly_cited":0,"productivity":1.33,"y2020":1,"y2021":0,"y2022":0,"y2023":0,"y2024":0,"y2025":0},{"name":"Nigel G. Ward","h":18,"pubs":37,"cites":475,"avg_cites":12.84,"self_ref":9.65,"self_cite_recv":26.53,"impact":15.74,"journals":20,"highly_cited":11,"productivity":4.43,"y2020":3,"y2021":4,"y2022":4,"y2023":3,"y2024":3,"y2025":4},{"name":"Jeffrey S. Weidner","h":6,"pubs":17,"cites":118,"avg_cites":6.94,"self_ref":7.03,"self_cite_recv":11.86,"impact":6.3,"journals":13,"highly_cited":5,"productivity":1.1,"y2020":0,"y2021":4,"y2022":3,"y2023":4,"y2024":0,"y2025":0},{"name":"David C. Zubia","h":18,"pubs":23,"cites":141,"avg_cites":6.13,"self_ref":14.88,"self_cite_recv":34.75,"impact":17.01,"journals":17,"highly_cited":5,"productivity":3.43,"y2020":0,"y2021":0,"y2022":1,"y2023":0,"y2024":2,"y2025":0},{"name":"Imad N. Abdallah","h":9,"pubs":33,"cites":153,"avg_cites":4.64,"self_ref":5.42,"self_cite_recv":20.92,"impact":5.64,"journals":19,"highly_cited":4,"productivity":2.62,"y2020":4,"y2021":1,"y2022":5,"y2023":0,"y2024":3,"y2025":2},{"name":"Palvi Aggarwal","h":13,"pubs":49,"cites":399,"avg_cites":8.14,"self_ref":23.29,"self_cite_recv":45.11,"impact":7.98,"journals":31,"highly_cited":14,"productivity":2.38,"y2020":13,"y2021":3,"y2022":6,"y2023":12,"y2024":5,"y2025":3},{"name":"M. D. Armanuzzaman","h":3,"pubs":10,"cites":24,"avg_cites":2.4,"self_ref":3.57,"self_cite_recv":20.83,"impact":2.4,"journals":10,"highly_cited":0,"productivity":0.48,"y2020":1,"y2021":2,"y2022":0,"y2023":0,"y2024":3,"y2025":3},{"name":"John J. Bird","h":7,"pubs":19,"cites":144,"avg_cites":7.58,"self_ref":12.92,"self_cite_recv":18.75,"impact":8.95,"journals":15,"highly_cited":3,"productivity":1.05,"y2020":5,"y2021":1,"y2022":4,"y2023":2,"y2024":1,"y2025":1},{"name":"Jaeyoung Cho","h":7,"pubs":22,"cites":111,"avg_cites":5.05,"self_ref":17.7,"self_cite_recv":29.73,"impact":4.83,"journals":9,"highly_cited":2,"productivity":1.1,"y2020":1,"y2021":0,"y2022":1,"y2023":8,"y2024":3,"y2025":3},{"name":"Dejana Čučak","h":5,"pubs":3,"cites":45,"avg_cites":15,"self_ref":12,"self_cite_recv":8.89,"impact":9,"journals":3,"highly_cited":1,"productivity":0.48,"y2020":0,"y2021":0,"y2022":0,"y2023":0,"y2024":1,"y2025":0},{"name":"Sriswaroop Dasari","h":26,"pubs":55,"cites":1993,"avg_cites":36.24,"self_ref":21.44,"self_cite_recv":13.85,"impact":36.24,"journals":24,"highly_cited":40,"productivity":2.62,"y2020":9,"y2021":20,"y2022":5,"y2023":12,"y2024":3,"y2025":6},{"name":"Amanda de Oliveira Barros","h":2,"pubs":6,"cites":15,"avg_cites":2.5,"self_ref":3.28,"self_cite_recv":20,"impact":2.5,"journals":5,"highly_cited":1,"productivity":0.29,"y2020":1,"y2021":1,"y2022":1,"y2023":1,"y2024":1,"y2025":1},{"name":"Sai Mounika Errapotu","h":8,"pubs":19,"cites":168,"avg_cites":8.84,"self_ref":13.57,"self_cite_recv":14.29,"impact":8.84,"journals":14,"highly_cited":4,"productivity":0.9,"y2020":2,"y2021":0,"y2022":1,"y2023":2,"y2024":3,"y2025":1},{"name":"Robert E. Ferguson","h":6,"pubs":10,"cites":119,"avg_cites":11.9,"self_ref":13.54,"self_cite_recv":14.29,"impact":11.9,"journals":7,"highly_cited":4,"productivity":0.48,"y2020":1,"y2021":3,"y2022":0,"y2023":0,"y2024":2,"y2025":1},{"name":"Marcelo Fabian Frias","h":15,"pubs":40,"cites":274,"avg_cites":6.85,"self_ref":16.41,"self_cite_recv":38.69,"impact":9.01,"journals":19,"highly_cited":12,"productivity":4.14,"y2020":0,"y2021":8,"y2022":4,"y2023":4,"y2024":2,"y2025":1},{"name":"Armanj D. Hasanyan","h":8,"pubs":26,"cites":160,"avg_cites":6.15,"self_ref":18.69,"self_cite_recv":35.62,"impact":7.48,"journals":19,"highly_cited":6,"productivity":1.29,"y2020":4,"y2021":0,"y2022":0,"y2023":2,"y2024":3,"y2025":4},{"name":"T. Horák","h":6,"pubs":26,"cites":114,"avg_cites":4.38,"self_ref":6.15,"self_cite_recv":20.18,"impact":4.21,"journals":16,"highly_cited":4,"productivity":1.33,"y2020":3,"y2021":1,"y2022":1,"y2023":2,"y2024":0,"y2025":5},{"name":"Niamat Ullah Ibne Hossain","h":24,"pubs":118,"cites":2027,"avg_cites":17.18,"self_ref":7.17,"self_cite_recv":18.6,"impact":16.75,"journals":61,"highly_cited":37,"productivity":5.76,"y2020":17,"y2021":9,"y2022":18,"y2023":30,"y2024":18,"y2025":13},{"name":"Md Nawshad Arslan Islam","h":3,"pubs":12,"cites":27,"avg_cites":2.25,"self_ref":6.59,"self_cite_recv":51.85,"impact":1.93,"journals":9,"highly_cited":0,"productivity":0.67,"y2020":2,"y2021":0,"y2022":1,"y2023":2,"y2024":2,"y2025":2},{"name":"Nan Jiang","h":11,"pubs":38,"cites":837,"avg_cites":22.03,"self_ref":4.31,"self_cite_recv":5.62,"impact":22.03,"journals":29,"highly_cited":12,"productivity":1.81,"y2020":2,"y2021":3,"y2022":4,"y2023":5,"y2024":7,"y2025":9},{"name":"Lauren C. Kennedy","h":12,"pubs":18,"cites":791,"avg_cites":43.94,"self_ref":9.66,"self_cite_recv":11.25,"impact":39.55,"journals":10,"highly_cited":12,"productivity":0.95,"y2020":0,"y2021":5,"y2022":5,"y2023":5,"y2024":1,"y2025":2},{"name":"Jaeyoon Kim","h":9,"pubs":14,"cites":333,"avg_cites":23.79,"self_ref":15.31,"self_cite_recv":12.31,"impact":22.2,"journals":13,"highly_cited":8,"productivity":0.71,"y2020":3,"y2021":2,"y2022":3,"y2023":0,"y2024":4,"y2025":1},{"name":"Yong Je Kim","h":12,"pubs":36,"cites":408,"avg_cites":11.33,"self_ref":7.5,"self_cite_recv":18.14,"impact":11.39,"journals":19,"highly_cited":11,"productivity":1.81,"y2020":4,"y2021":3,"y2022":3,"y2023":3,"y2024":6,"y2025":6},{"name":"Anantaa Kotal","h":7,"pubs":15,"cites":184,"avg_cites":12.27,"self_ref":18.46,"self_cite_recv":34.78,"impact":11.56,"journals":13,"highly_cited":7,"productivity":0.76,"y2020":4,"y2021":2,"y2022":1,"y2023":3,"y2024":3,"y2025":2},{"name":"D. Langarica","h":10,"pubs":62,"cites":448,"avg_cites":7.23,"self_ref":11.89,"self_cite_recv":25,"impact":7.04,"journals":37,"highly_cited":7,"productivity":3.19,"y2020":3,"y2021":9,"y2022":8,"y2023":10,"y2024":8,"y2025":8},{"name":"Christoph Quirin Lauter","h":10,"pubs":25,"cites":124,"avg_cites":4.96,"self_ref":12.73,"self_cite_recv":27.42,"impact":12.84,"journals":12,"highly_cited":3,"productivity":1.81,"y2020":2,"y2021":2,"y2022":0,"y2023":1,"y2024":4,"y2025":1},{"name":"Camila Leite Madeira","h":11,"pubs":16,"cites":363,"avg_cites":22.69,"self_ref":7.89,"self_cite_recv":17.63,"impact":21.35,"journals":7,"highly_cited":12,"productivity":0.81,"y2020":1,"y2021":3,"y2022":3,"y2023":2,"y2024":1,"y2025":1},{"name":"Sergio Luna","h":8,"pubs":21,"cites":629,"avg_cites":29.95,"self_ref":1.44,"self_cite_recv":0.95,"impact":29.86,"journals":11,"highly_cited":5,"productivity":1.05,"y2020":0,"y2021":0,"y2022":8,"y2023":4,"y2024":3,"y2025":1},{"name":"Jorge Manrique Castro","h":4,"pubs":19,"cites":51,"avg_cites":2.68,"self_ref":15.29,"self_cite_recv":49.02,"impact":2.68,"journals":11,"highly_cited":1,"productivity":0.9,"y2020":0,"y2021":1,"y2022":5,"y2023":7,"y2024":5,"y2025":1},{"name":"Sohail M.A.K. Mohammed","h":20,"pubs":81,"cites":1076,"avg_cites":13.28,"self_ref":14.52,"self_cite_recv":21.19,"impact":13.22,"journals":55,"highly_cited":36,"productivity":3.95,"y2020":6,"y2021":5,"y2022":10,"y2023":6,"y2024":12,"y2025":16},{"name":"Sylvia L. Natividad-Diaz","h":5,"pubs":7,"cites":107,"avg_cites":15.29,"self_ref":9.26,"self_cite_recv":21.5,"impact":15.29,"journals":7,"highly_cited":2,"productivity":0.33,"y2020":0,"y2021":0,"y2022":1,"y2023":1,"y2024":2,"y2025":2},{"name":"Aritran Piplai","h":14,"pubs":27,"cites":738,"avg_cites":27.33,"self_ref":18.53,"self_cite_recv":15.31,"impact":25.59,"journals":21,"highly_cited":16,"productivity":1.38,"y2020":6,"y2021":5,"y2022":2,"y2023":2,"y2024":6,"y2025":4},{"name":"Wilson Poon","h":11,"pubs":20,"cites":3150,"avg_cites":157.5,"self_ref":8.63,"self_cite_recv":2.44,"impact":144,"journals":15,"highly_cited":10,"productivity":1.05,"y2020":3,"y2021":2,"y2022":1,"y2023":0,"y2024":5,"y2025":2},{"name":"Md Fashiar Rahman","h":7,"pubs":35,"cites":366,"avg_cites":10.46,"self_ref":4.52,"self_cite_recv":7.65,"impact":10.17,"journals":20,"highly_cited":6,"productivity":1.71,"y2020":2,"y2021":4,"y2022":7,"y2023":6,"y2024":6,"y2025":8},{"name":"Mohammad Saidur Rahman","h":7,"pubs":15,"cites":480,"avg_cites":32,"self_ref":7.66,"self_cite_recv":5,"impact":32,"journals":8,"highly_cited":5,"productivity":0.71,"y2020":0,"y2021":1,"y2022":3,"y2023":1,"y2024":1,"y2025":5},{"name":"Nichole M. Ramirez","h":9,"pubs":23,"cites":133,"avg_cites":5.78,"self_ref":8.74,"self_cite_recv":33.83,"impact":7.41,"journals":5,"highly_cited":6,"productivity":1.29,"y2020":1,"y2021":1,"y2022":2,"y2023":3,"y2024":2,"y2025":3},{"name":"Anabel Renteria","h":13,"pubs":31,"cites":547,"avg_cites":17.65,"self_ref":10.33,"self_cite_recv":19.56,"impact":17.09,"journals":24,"highly_cited":15,"productivity":1.52,"y2020":2,"y2021":6,"y2022":4,"y2023":3,"y2024":1,"y2025":9},{"name":"Cal J. Rising","h":6,"pubs":16,"cites":99,"avg_cites":6.19,"self_ref":10.71,"self_cite_recv":25.25,"impact":6.19,"journals":13,"highly_cited":5,"productivity":0.76,"y2020":2,"y2021":5,"y2022":2,"y2023":3,"y2024":1,"y2025":1},{"name":"Afroza Shirin","h":9,"pubs":25,"cites":345,"avg_cites":13.8,"self_ref":5.78,"self_cite_recv":17.97,"impact":13.8,"journals":14,"highly_cited":7,"productivity":1.19,"y2020":1,"y2021":4,"y2022":1,"y2023":2,"y2024":4,"y2025":6},{"name":"Priscila Silva","h":3,"pubs":23,"cites":37,"avg_cites":1.61,"self_ref":7.34,"self_cite_recv":54.05,"impact":1.54,"journals":17,"highly_cited":1,"productivity":1.14,"y2020":0,"y2021":0,"y2022":4,"y2023":6,"y2024":8,"y2025":5},{"name":"Sajedul Karim Talukder","h":8,"pubs":57,"cites":179,"avg_cites":3.14,"self_ref":7.27,"self_cite_recv":29.61,"impact":3.17,"journals":22,"highly_cited":3,"productivity":2.81,"y2020":0,"y2021":4,"y2022":3,"y2023":15,"y2024":15,"y2025":16},{"name":"César A. Terrazas-Nájera","h":18,"pubs":23,"cites":1062,"avg_cites":46.17,"self_ref":14.04,"self_cite_recv":3.86,"impact":46.81,"journals":14,"highly_cited":13,"productivity":1.52,"y2020":4,"y2021":4,"y2022":1,"y2023":1,"y2024":1,"y2025":0},{"name":"Davi V.Q. Rodrigues","h":9,"pubs":25,"cites":191,"avg_cites":7.64,"self_ref":26.78,"self_cite_recv":26.18,"impact":7.64,"journals":19,"highly_cited":8,"productivity":1.19,"y2020":5,"y2021":4,"y2022":5,"y2023":6,"y2024":3,"y2025":2},{"name":"Sungmin Youn","h":8,"pubs":16,"cites":149,"avg_cites":9.31,"self_ref":6.78,"self_cite_recv":16.11,"impact":9.72,"journals":15,"highly_cited":5,"productivity":0.86,"y2020":1,"y2021":2,"y2022":1,"y2023":4,"y2024":4,"y2025":0},{"name":"Raed E. Aldouri","h":9,"pubs":8,"cites":111,"avg_cites":13.88,"self_ref":7.2,"self_cite_recv":8.11,"impact":17.18,"journals":7,"highly_cited":3,"productivity":0.81,"y2020":0,"y2021":0,"y2022":0,"y2023":0,"y2024":1,"y2025":0},{"name":"Omar Cedillos-Barraza","h":4,"pubs":3,"cites":446,"avg_cites":148.67,"self_ref":11.69,"self_cite_recv":5.38,"impact":121.4,"journals":3,"highly_cited":2,"productivity":0.24,"y2020":0,"y2021":0,"y2022":0,"y2023":0,"y2024":0,"y2025":1},{"name":"Hector Erives","h":8,"pubs":8,"cites":10,"avg_cites":1.25,"self_ref":25.76,"self_cite_recv":80,"impact":16.03,"journals":4,"highly_cited":0,"productivity":1.43,"y2020":1,"y2021":0,"y2022":4,"y2023":0,"y2024":0,"y2025":0},{"name":"Virgilio Ernesto Gonzalez","h":5,"pubs":22,"cites":23,"avg_cites":1.05,"self_ref":5.3,"self_cite_recv":39.13,"impact":4.62,"journals":10,"highly_cited":0,"productivity":2.24,"y2020":2,"y2021":2,"y2022":3,"y2023":3,"y2024":5,"y2025":1},{"name":"Oscar A. Mondragón","h":8,"pubs":13,"cites":77,"avg_cites":5.92,"self_ref":4.25,"self_cite_recv":19.48,"impact":8.58,"journals":9,"highly_cited":3,"productivity":1.14,"y2020":2,"y2021":0,"y2022":5,"y2023":0,"y2024":0,"y2025":0},{"name":"Rodrigo A. Romero","h":5,"pubs":7,"cites":17,"avg_cites":2.43,"self_ref":9.57,"self_cite_recv":41.18,"impact":4.12,"journals":5,"highly_cited":0,"productivity":0.76,"y2020":0,"y2021":0,"y2022":1,"y2023":1,"y2024":1,"y2025":1},{"name":"Miroslava Barúa","h":2,"pubs":1,"cites":0,"avg_cites":0,"self_ref":0,"self_cite_recv":0,"impact":9,"journals":1,"highly_cited":0,"productivity":0.19,"y2020":0,"y2021":0,"y2022":0,"y2023":0,"y2024":0,"y2025":0},{"name":"Bhanukiran Gurijala","h":1,"pubs":1,"cites":1,"avg_cites":1,"self_ref":0,"self_cite_recv":100,"impact":1,"journals":1,"highly_cited":0,"productivity":0.05,"y2020":0,"y2021":0,"y2022":0,"y2023":0,"y2024":0,"y2025":0},{"name":"Jesus J. Gutierrez","h":4,"pubs":6,"cites":65,"avg_cites":10.83,"self_ref":21.13,"self_cite_recv":33.85,"impact":10.83,"journals":6,"highly_cited":2,"productivity":0.29,"y2020":0,"y2021":0,"y2022":3,"y2023":0,"y2024":0,"y2025":0},{"name":"Arifur Rahaman Khan","h":8,"pubs":8,"cites":40,"avg_cites":5,"self_ref":9.7,"self_cite_recv":30,"impact":8.26,"journals":7,"highly_cited":0,"productivity":1.62,"y2020":0,"y2021":0,"y2022":0,"y2023":0,"y2024":0,"y2025":0},{"name":"Piyush Kumar","h":5,"pubs":7,"cites":86,"avg_cites":12.29,"self_ref":12.82,"self_cite_recv":27.91,"impact":12.29,"journals":5,"highly_cited":4,"productivity":0.33,"y2020":0,"y2021":0,"y2022":1,"y2023":2,"y2024":2,"y2025":2},{"name":"Daniel M. Mejia","h":2,"pubs":5,"cites":6,"avg_cites":1.2,"self_ref":2.21,"self_cite_recv":33.33,"impact":1.2,"journals":5,"highly_cited":0,"productivity":0.24,"y2020":0,"y2021":0,"y2022":1,"y2023":0,"y2024":0,"y2025":2},{"name":"Joanne M. Moyer","h":9,"pubs":9,"cites":104,"avg_cites":11.56,"self_ref":9.56,"self_cite_recv":12.5,"impact":13.29,"journals":8,"highly_cited":3,"productivity":0.67,"y2020":2,"y2021":2,"y2022":1,"y2023":0,"y2024":0,"y2025":0},{"name":"Kuldeep Singh","h":10,"pubs":17,"cites":408,"avg_cites":24,"self_ref":11.04,"self_cite_recv":11.27,"impact":24,"journals":14,"highly_cited":10,"productivity":0.81,"y2020":2,"y2021":2,"y2022":1,"y2023":4,"y2024":1,"y2025":1},{"name":"Stephen William Stafford","h":8,"pubs":13,"cites":181,"avg_cites":13.92,"self_ref":5.95,"self_cite_recv":4.42,"impact":19.47,"journals":8,"highly_cited":1,"productivity":2.43,"y2020":0,"y2021":2,"y2022":0,"y2023":1,"y2024":1,"y2025":0},{"name":"Lucas Galey","h":2,"pubs":4,"cites":11,"avg_cites":2.75,"self_ref":3.33,"self_cite_recv":18.18,"impact":2.75,"journals":3,"highly_cited":0,"productivity":0.19,"y2020":0,"y2021":0,"y2022":1,"y2023":1,"y2024":1,"y2025":1},{"name":"Md Ariful Ahsan","h":36,"pubs":48,"cites":3882,"avg_cites":80.88,"self_ref":9.97,"self_cite_recv":8.84,"impact":79.22,"journals":31,"highly_cited":43,"productivity":2.33,"y2020":11,"y2021":10,"y2022":7,"y2023":1,"y2024":0,"y2025":1},{"name":"Mayra C. Chavez","h":3,"pubs":6,"cites":104,"avg_cites":17.33,"self_ref":12.3,"self_cite_recv":6.73,"impact":17.33,"journals":5,"highly_cited":1,"productivity":0.29,"y2020":1,"y2021":1,"y2022":1,"y2023":1,"y2024":0,"y2025":1},{"name":"Ana Cristina Martínez","h":9,"pubs":19,"cites":209,"avg_cites":11,"self_ref":14.36,"self_cite_recv":28.71,"impact":11,"journals":16,"highly_cited":8,"productivity":0.9,"y2020":0,"y2021":1,"y2022":4,"y2023":4,"y2024":4,"y2025":6},{"name":"Alexis Maurel","h":13,"pubs":25,"cites":760,"avg_cites":30.4,"self_ref":13.45,"self_cite_recv":19.34,"impact":30.4,"journals":21,"highly_cited":15,"productivity":1.19,"y2020":2,"y2021":4,"y2022":1,"y2023":4,"y2024":5,"y2025":7},{"name":"Annalisa Perez","h":1,"pubs":1,"cites":9,"avg_cites":9,"self_ref":0,"self_cite_recv":0,"impact":9,"journals":1,"highly_cited":0,"productivity":0.05,"y2020":0,"y2021":0,"y2022":1,"y2023":0,"y2024":0,"y2025":0},{"name":"Honglun Xu","h":6,"pubs":12,"cites":304,"avg_cites":25.33,"self_ref":6.25,"self_cite_recv":7.89,"impact":23.38,"journals":12,"highly_cited":4,"productivity":0.62,"y2020":2,"y2021":2,"y2022":3,"y2023":1,"y2024":1,"y2025":1},{"name":"Raja Devesh Kumar Misra","h":95,"pubs":743,"cites":22883,"avg_cites":30.8,"self_ref":12.33,"self_cite_recv":15.64,"impact":39.22,"journals":127,"highly_cited":493,"productivity":50.43,"y2020":79,"y2021":79,"y2022":67,"y2023":55,"y2024":31,"y2025":30},{"name":"Ramana Venkata Chintalapalle","h":58,"pubs":160,"cites":4116,"avg_cites":25.73,"self_ref":12.86,"self_cite_recv":17.62,"impact":38.43,"journals":78,"highly_cited":104,"productivity":15,"y2020":17,"y2021":16,"y2022":21,"y2023":18,"y2024":9,"y2025":14},{"name":"Ahsan R. Choudhuri","h":19,"pubs":92,"cites":478,"avg_cites":5.2,"self_ref":5.5,"self_cite_recv":18.62,"impact":7.47,"journals":48,"highly_cited":7,"productivity":9.95,"y2020":10,"y2021":7,"y2022":8,"y2023":13,"y2024":6,"y2025":9},{"name":"Ryan Blaine Wicker","h":70,"pubs":116,"cites":5703,"avg_cites":49.16,"self_ref":15.14,"self_cite_recv":6.47,"impact":70.19,"journals":55,"highly_cited":73,"productivity":14,"y2020":16,"y2021":12,"y2022":5,"y2023":4,"y2024":8,"y2025":5}];
+
+const LABELS = {h:'H-index',pubs:'Publications',cites:'Total citations',avg_cites:'Avg cit/paper',self_ref:'Self-ref rate %',self_cite_recv:'Self-cite recv %',impact:'Citation impact',journals:'Unique journals',highly_cited:'Highly cited papers',productivity:'Productivity score'};
+const COLORS = ['#3266ad','#d85a30','#1d9e75','#ba7517','#993556','#534ab7','#3b6d11','#185fa5'];
+
+// Summary metrics
+const totalCites = RAW.reduce((a,r)=>a+r.cites,0);
+const totalPubs = RAW.reduce((a,r)=>a+r.pubs,0);
+const maxH = Math.max(...RAW.map(r=>r.h));
+const avgH = (RAW.reduce((a,r)=>a+r.h,0)/RAW.length).toFixed(1);
+document.getElementById('summary-metrics').innerHTML = `
+<div class="metric"><div class="label">Authors</div><div class="val">126</div></div>
+<div class="metric"><div class="label">Total citations</div><div class="val">${totalCites.toLocaleString()}</div></div>
+<div class="metric"><div class="label">Total publications</div><div class="val">${totalPubs.toLocaleString()}</div></div>
+<div class="metric"><div class="label">Highest H-index</div><div class="val">${maxH} <span style="font-size:14px;color:var(--color-text-secondary)">avg ${avgH}</span></div></div>`;
+
+// Tabs
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-'+t.dataset.panel).classList.add('active');
+    if(t.dataset.panel==='rankings') renderRank();
+    if(t.dataset.panel==='trends') renderTrend();
+    if(t.dataset.panel==='selfcite') renderSelf();
+    if(t.dataset.panel==='table') renderTable();
+  });
+});
+
+// Scatter
+let scChart;
+function renderScatter(){
+  const xk=document.getElementById('sc-x').value;
+  const yk=document.getElementById('sc-y').value;
+  const sk=document.getElementById('sc-size').value;
+  const maxS=Math.max(...RAW.map(r=>r[sk]));
+  const pts=RAW.map(r=>({x:r[xk],y:r[yk],r:Math.max(4,Math.sqrt(r[sk]/maxS)*28),name:r.name,d:r}));
+  if(scChart)scChart.destroy();
+  scChart=new Chart(document.getElementById('scatterChart'),{
+    type:'bubble',
+    data:{datasets:[{data:pts,backgroundColor:'rgba(50,102,173,0.55)',borderColor:'rgba(50,102,173,0.8)',borderWidth:1}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>{const d=i.raw.d;return[d.name,`${LABELS[xk]}: ${d[xk].toLocaleString()}`,`${LABELS[yk]}: ${d[yk].toLocaleString()}`];}}}},
+      scales:{x:{title:{display:true,text:LABELS[xk],font:{size:12}}},y:{title:{display:true,text:LABELS[yk],font:{size:12}}}},
+      layout:{padding:16}
+    }
+  });
+}
+renderScatter();
+['sc-x','sc-y','sc-size'].forEach(id=>document.getElementById(id).addEventListener('change',renderScatter));
+
+// Rankings
+let rankChart;
+function renderRank(){
+  const key=document.getElementById('rank-by').value;
+  const n=parseInt(document.getElementById('rank-n').value);
+  const sorted=[...RAW].sort((a,b)=>b[key]-a[key]).slice(0,n);
+  const wrap=document.getElementById('rank-chart-wrap');
+  wrap.style.height=(sorted.length*34+80)+'px';
+  if(rankChart)rankChart.destroy();
+  rankChart=new Chart(document.getElementById('rankChart'),{
+    type:'bar',
+    data:{
+      labels:sorted.map(r=>r.name),
+      datasets:[{data:sorted.map(r=>r[key]),backgroundColor:'#3266ad',borderRadius:3}]
+    },
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>`${LABELS[key]}: ${i.raw.toLocaleString()}`}}},
+      scales:{x:{title:{display:true,text:LABELS[key],font:{size:12}},ticks:{autoSkip:true}},y:{ticks:{font:{size:11}}}},
+      layout:{padding:{right:16}}
+    }
+  });
+}
+document.getElementById('rank-by').addEventListener('change',renderRank);
+document.getElementById('rank-n').addEventListener('change',renderRank);
+
+// Trends
+let trendChart;
+function renderTrend(){
+  const mode=document.getElementById('trend-mode').value;
+  const years=['2020','2021','2022','2023','2024','2025'];
+  const ykeys=['y2020','y2021','y2022','y2023','y2024','y2025'];
+  if(trendChart)trendChart.destroy();
+  if(mode==='total'){
+    const totals=ykeys.map(k=>RAW.reduce((a,r)=>a+r[k],0));
+    trendChart=new Chart(document.getElementById('trendChart'),{
+      type:'bar',
+      data:{labels:years,datasets:[{label:'Dept total',data:totals,backgroundColor:'#3266ad',borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:'Publications'}}}}
+    });
+  } else {
+    const top10=[...RAW].sort((a,b)=>b.pubs-a.pubs).slice(0,10);
+    trendChart=new Chart(document.getElementById('trendChart'),{
+      type:'bar',
+      data:{
+        labels:years,
+        datasets:top10.map((r,i)=>({label:r.name.split(' ').pop(),data:ykeys.map(k=>r[k]),backgroundColor:COLORS[i%COLORS.length],stack:'s'}))
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:10}}},scales:{x:{stacked:true},y:{stacked:true,title:{display:true,text:'Publications'}}}}
+    });
+  }
+}
+document.getElementById('trend-mode').addEventListener('change',renderTrend);
+
+// Self-citation
+let selfChart;
+function renderSelf(){
+  const key=document.getElementById('sc2-metric').value;
+  const sorted=[...RAW].sort((a,b)=>b[key]-a[key]);
+  if(selfChart)selfChart.destroy();
+  const wrap=document.getElementById('selfChart').parentElement;
+  wrap.style.height=Math.max(400,(sorted.length*14+80))+'px';
+  const colors=sorted.map(r=>r[key]>20?'#e24b4a':r[key]>10?'#ef9f27':'#3266ad');
+  selfChart=new Chart(document.getElementById('selfChart'),{
+    type:'bar',
+    data:{labels:sorted.map(r=>r.name),datasets:[{data:sorted.map(r=>r[key]),backgroundColor:colors,borderRadius:2}]},
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>`${i.raw.toFixed(1)}%`}}},
+      scales:{x:{title:{display:true,text:'%',font:{size:12}},max:Math.min(100,Math.max(...sorted.map(r=>r[key]))*1.1)},y:{ticks:{font:{size:10}}}},
+      layout:{padding:{right:16}}
+    }
+  });
+}
+document.getElementById('sc2-metric').addEventListener('change',renderSelf);
+
+// Table
+let sortCol='cites', sortDir=-1;
+function renderTable(){
+  const q=document.getElementById('tbl-search').value.toLowerCase();
+  const minh=parseInt(document.getElementById('tbl-minh').value)||0;
+  const maxBar=Math.max(...RAW.map(r=>r.cites));
+  let data=[...RAW].filter(r=>r.name.toLowerCase().includes(q)&&r.h>=minh);
+  data.sort((a,b)=>{
+    const av=a[sortCol],bv=b[sortCol];
+    return typeof av==='string'?av.localeCompare(bv)*sortDir:(bv-av)*sortDir*-1;
+  });
+  document.getElementById('tbl-body').innerHTML=data.map(r=>{
+    const barW=Math.round(r.cites/maxBar*80);
+    const hp=r.h>=30?'high':r.h>=15?'mid':'low';
+    return `<tr>
+      <td>${r.name}</td>
+      <td><span class="pill ${hp}">${r.h}</span></td>
+      <td>${r.pubs}</td>
+      <td><div class="bar-cell"><div class="bar" style="width:${barW}px"></div>${r.cites.toLocaleString()}</div></td>
+      <td>${r.avg_cites.toFixed(1)}</td>
+      <td>${r.highly_cited}</td>
+      <td>${r.self_ref.toFixed(1)}%</td>
+      <td>${r.journals}</td>
+    </tr>`;
+  }).join('');
+}
+document.querySelectorAll('#main-table th').forEach(th=>{
+  th.addEventListener('click',()=>{
+    if(sortCol===th.dataset.col)sortDir*=-1; else{sortCol=th.dataset.col;sortDir=-1;}
+    renderTable();
+  });
+});
+document.getElementById('tbl-search').addEventListener('input',renderTable);
+document.getElementById('tbl-minh').addEventListener('input',renderTable);
+renderTable();
+</script>
